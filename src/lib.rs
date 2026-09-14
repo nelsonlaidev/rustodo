@@ -111,3 +111,111 @@ fn tmp_path(path: &Path) -> PathBuf {
     tmp.push(".tmp");
     PathBuf::from(tmp)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    struct TempFile {
+        path: PathBuf,
+    }
+
+    impl TempFile {
+        fn new() -> Self {
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let mut path = std::env::temp_dir();
+            path.push(format!("rustodo-test-{}-{id}.json", std::process::id()));
+            let _ = std::fs::remove_file(&path);
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.path);
+            let _ = std::fs::remove_file(tmp_path(&self.path));
+        }
+    }
+
+    #[test]
+    fn load_missing_file_is_empty() {
+        let file = TempFile::new();
+        assert_eq!(load_tasks(file.path()).unwrap(), Vec::new());
+    }
+
+    #[test]
+    fn load_empty_file_is_empty() {
+        let file = TempFile::new();
+        File::create(file.path()).unwrap();
+        assert_eq!(load_tasks(file.path()).unwrap(), Vec::new());
+    }
+
+    #[test]
+    fn add_assigns_incrementing_ids() {
+        let file = TempFile::new();
+
+        let first = add_task(file.path(), "buy milk").unwrap();
+        let second = add_task(file.path(), "write tests").unwrap();
+
+        assert_eq!(first.id, 1);
+        assert_eq!(second.id, 2);
+        assert_eq!(load_tasks(file.path()).unwrap(), vec![first, second]);
+    }
+
+    #[test]
+    fn add_trims_title() {
+        let file = TempFile::new();
+        let task = add_task(file.path(), "  buy milk  ").unwrap();
+        assert_eq!(task.title, "buy milk");
+    }
+
+    #[test]
+    fn add_rejects_blank_title() {
+        let file = TempFile::new();
+        assert!(add_task(file.path(), "   ").is_err());
+    }
+
+    #[test]
+    fn remove_task_returns_and_persists() {
+        let file = TempFile::new();
+        let first = add_task(file.path(), "first").unwrap();
+        let second = add_task(file.path(), "second").unwrap();
+
+        let removed = remove_task(file.path(), first.id).unwrap();
+
+        assert_eq!(removed, first);
+        assert_eq!(load_tasks(file.path()).unwrap(), vec![second]);
+    }
+
+    #[test]
+    fn remove_missing_task_is_error() {
+        let file = TempFile::new();
+        assert!(remove_task(file.path(), 99).is_err());
+    }
+
+    #[test]
+    fn complete_task_marks_done_and_persists() {
+        let file = TempFile::new();
+        let task = add_task(file.path(), "buy milk").unwrap();
+
+        let completed = complete_task(file.path(), task.id).unwrap();
+
+        assert!(completed.completed);
+        assert!(load_tasks(file.path()).unwrap()[0].completed);
+    }
+
+    #[test]
+    fn complete_missing_task_is_error() {
+        let file = TempFile::new();
+        assert!(complete_task(file.path(), 99).is_err());
+    }
+}

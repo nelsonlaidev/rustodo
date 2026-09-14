@@ -63,13 +63,15 @@ fn handle_command(command: Commands) -> Result<()> {
 
             let new_id = tasks.iter().map(|task| task.id).max().unwrap_or(0) + 1;
 
-            let new_task = Task::new(new_id, title.clone());
+            let new_task = Task::new(new_id, title);
 
             tasks.push(new_task);
 
             save_tasks(&tasks)?;
 
-            println!("Added task #{}: {}", new_id, title);
+            let added_task = tasks.last().unwrap();
+
+            println!("Added task #{}: {}", added_task.id, added_task.title);
         }
         Commands::List => {
             let tasks = load_tasks()?;

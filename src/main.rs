@@ -1,6 +1,6 @@
 use std::{
-    fs::File,
-    io::{BufReader, BufWriter, ErrorKind},
+    fs::{self, File},
+    io::{BufReader, BufWriter, ErrorKind, Write},
     process::exit,
 };
 
@@ -123,10 +123,17 @@ fn handle_command(command: Commands) -> Result<()> {
 }
 
 fn save_tasks(tasks: &[Task]) -> Result<()> {
-    let file = File::create("data.json")?;
-    let writer = BufWriter::new(file);
+    let path = "data.json";
+    let tmp_path = "data.json.tmp";
 
-    serde_json::to_writer_pretty(writer, &tasks)?;
+    {
+        let file = File::create(tmp_path)?;
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer_pretty(&mut writer, tasks)?;
+        writer.flush()?;
+    }
+
+    fs::rename(tmp_path, path)?;
 
     Ok(())
 }

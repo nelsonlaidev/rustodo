@@ -148,7 +148,11 @@ fn load_tasks() -> Result<Vec<Task>> {
     };
     let reader = BufReader::new(file);
 
-    let tasks: Vec<Task> = serde_json::from_reader(reader)?;
+    let tasks: Vec<Task> = match serde_json::from_reader(reader) {
+        Ok(data) => data,
+        Err(e) if e.is_eof() => Vec::new(),
+        Err(e) => return Err(e.into()),
+    };
 
     Ok(tasks)
 }
